@@ -99,9 +99,9 @@ impl Home {
         self.folder(version).display().to_string()
     }
 
-    /// The variables that keep mise and nvmise inside this home. mise's four
-    /// folders are all pointed here, so that a test which ever started the
-    /// mise on this machine could still not reach its real folders.
+    /// The variables that keep mise and nvmise inside this home. Every folder
+    /// mise uses is pointed here, so a test that starts the mise program of
+    /// this machine still can't reach the folders of the person running it.
     pub fn vars(&self) -> Vec<(String, String)> {
         let inside = |path: &str| self.root.join(path).display().to_string();
         vec![
@@ -112,6 +112,8 @@ impl Home {
             ("MISE_CONFIG_DIR".to_string(), inside("mise/config")),
             ("MISE_CACHE_DIR".to_string(), inside("mise/cache")),
             ("MISE_STATE_DIR".to_string(), inside("mise/state")),
+            // Where mise looks for settings that apply to the whole machine.
+            ("MISE_SYSTEM_DIR".to_string(), inside("mise/system")),
         ]
     }
 
