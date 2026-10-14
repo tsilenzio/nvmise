@@ -1,13 +1,9 @@
 # Differences between nvmise and official nvm that are there on purpose,
 # because Node versions live in mise's folder and mise installs them.
-# One rule per line: <case> <shell> <what differs>. A `*` at the end of a
-# name stands for everything that starts with it.
-#
-# The first rules hold for every case. The rest name whole cases, sorted
-# by why they cannot match. That sorting was done by a script from each
-# case's own text and from what differed on 2026-10-13, and about one in
-# five was read by hand. A case here is not compared at all, so a real
-# fault in one of them would not show.
+# One rule per line: <case> <shell> <what differs>, or
+# <case> <shell> <what differs> ~ <line>, which takes the lines that fit
+# out of both sides and compares the rest. A `*` at the start or end of a
+# name stands for anything there.
 
 # Versions, aliases and downloads are not in the nvm folder.
 * * fs:home/.nvm/versions*
@@ -17,181 +13,176 @@
 * * var:NVMISE_*
 * * var:MISE_*
 
-# Building Node from source (`nvm install -s`, `-j`, compiler settings). mise unpacks ready-made releases.
-# 18 cases.
-DLD-06a * *
+# Installing. mise downloads, checks and unpacks a release, and prints its
+# own lines while it does. Official nvm prints others for the same steps.
+# Both kinds are taken out wherever they appear: in what a case prints and
+# in files a case writes them to. Everything else in those places is still
+# compared, `Downloading and installing node v...` included.
+* * * ~ mise *
+* * * ~   node@*
+* * * ~ Downloading <mirror>/*
+* * * ~ Computing checksum with *
+* * * ~ Checksums matched!
+* * * ~ *#####*
+# mise's own `bin/npm` runs `mise reshim` by name after a global install.
+# The harness's shells have no mise on PATH, and a person's would.
+* * * ~ Reshimming mise *
+* * * ~ *: mise: command not found
+
+# Narrower rules for cases that differ in one named place only.
+# nvmise doesn't offer io.js, so TAB doesn't suggest , and it turns
+# `nvm cache` down, so TAB doesn't suggest `cache`.
+HLP-07b * stdout ~ iojs
+HLP-08 * stdout ~ iojs
+HLP-08 * var:COMPREPLY
+HLP-08b * stdout ~ iojs
+HLP-08b * var:COMPREPLY
+HLP-06a * stdout ~ cache
+# A case that lists every variable sees nvmise's and mise's settings.
+SHL-09c * fs:home/env-* ~ MISE_*
+SHL-09c * fs:home/env-* ~ NVMISE_*
+# nvm leaves the alias file's path in ALIAS, and nvmise's aliases are in
+# a folder of their own.
+UNI-07 * var:ALIAS
+
+# Cases kept out whole, grouped by the reason nothing narrower works. Each
+# line ends with the case's own description where it has one. A case kept
+# out is not compared at all.
+
+# Builds Node from source (`nvm install -s`, `-j`, compiler settings). nvmise turns that down: mise unpacks ready-made releases. 18 cases.
+DLD-06a * *  # An empty expected checksum fails the binary download.
 DLD-07a * *
-INS-02 * *
-INS-06f * *
-INS-07a * *
-INS-07c * *
+INS-02 * *  # -s and -b together exit 6 in either order.
+INS-06f * *  # --offline with a cached version but no cached archive reports the missing archive.
+INS-07a * *  # NVM_NO_SOURCE_FALLBACK=1 with -s exits 6, other values are ignored.
+INS-07c * *  # NVM_NO_SOURCE_FALLBACK with a value other than 1 still falls back to source.
 INS-25 * *
 INS-27 * *
-INS-28 * *
-INS-29a * *
-INS-29b * *
+INS-28 * *  # A failed binary install falls back to a source build.
+INS-29a * *  # FreeBSD and OpenBSD have no binaries and always build from source.
+INS-29b * *  # Non-WSL Windows cannot build from source, exit 87.
 INS-50 * *
 INS-50b * *
 INS-50c * *
 INS-50d * *
-INS-50e * *
-INS-50f * *
-NVT-fast/Unit_tests/nvm_install_-s_and_-b_conflict * *
+INS-50e * *  # A source build over a version that is already installed says so and builds nothing.
+INS-50f * *  # With no make on PATH a source build stops after configure, and the shell says make is missing.
+NVT-fast/Unit_tests/nvm_install_-s_and_-b_conflict * *  # fast/Unit tests/nvm install -s and -b conflict
 
-# NVM_INSTALL_THIRD_PARTY_HOOK. Not run, since mise would not know the version.
-# 1 cases.
-INS-18 * *
-
-# nvm's own download, checksum, cache, --offline and install lock. mise does the download, so the lines nvm prints about it and the `cache` command are not there.
-# 57 cases.
-DBG-01 * *
-DLD-01c * *
-DLD-03 * *
-DLD-04 * *
-DLD-05 * *
-DLD-06b * *
-DLD-07b * *
-DLD-08a * *
-DLD-09 * *
+# Uses nvm's download cache: `nvm cache`, `--offline`, an archive kept or broken in `$NVM_DIR/.cache`, or the install lock there. nvmise turns `nvm cache` and `--offline` down, and mise does the downloading. 31 cases.
+DLD-06b * *  # A cached archive with the wrong checksum prints the mismatch, is removed and downloaded again.
+DLD-08a * *  # Reinstalling reuses the cached archive under .cache/bin.
+DLD-09 * *  # nvm cache dir, clear, a failed clear, and the usage error.
 DLD-13 * *
 FIL-02 * *
+FIL-06c * *
+INS-06a * *  # --offline resolves a partial version from installed versions.
+INS-06b * *
+INS-06c * *  # --offline not-found wording points at nvm ls, exit 3.
+INS-06d * *  # --offline installs a version that is only in the download cache.
+INS-06e * *  # --offline LTS request resolves through local LTS aliases.
+INS-07b * *  # NVM_NO_SOURCE_FALLBACK=1 aborts after a failed binary install like -b.
+INS-08 * *  # Without curl or wget install exits 1 unless --offline.
+INS-11b * *  # A broken installed tree fails validation and is reinstalled.
+INS-17a * *  # A held install lock times out after NVM_INSTALL_LOCK_TIMEOUT seconds with exit 1.
+INS-17b * *  # NVM_INSTALL_LOCK_STALE steals a lock older than its minutes and the lock is released after install.
+INS-17c * *  # The install lock is per version, a lock on another version does not block.
+INS-21b * *  # -b with a failed binary download aborts with exit 2.
+INS-22 * *
+INS-51 * *  # An install whose output goes to a pipe nobody reads stops at its first line.
+NVT-fast/Unit_tests/Running__nvm_use_--save__works_as_expected_ * *  # fast/Unit tests/Running 'nvm use --save' works as expected'
+NVT-fast/Unit_tests/Running__nvm_use_--save__works_with_a_.nvmrc_in_the_parent_dir * *  # fast/Unit tests/Running 'nvm use --save' works with a .nvmrc in the parent dir
+NVT-fast/Unit_tests/Running__nvm_use_--silent_--save__doesn_t_output_anything * *  # fast/Unit tests/Running 'nvm use --silent --save' doesn't output anything
+NVT-fast/Unit_tests/nvm_acquire_install_lock * *  # fast/Unit tests/nvm_acquire_install_lock
+NVT-fast/Unit_tests/nvm_install_--offline * *  # fast/Unit tests/nvm install --offline
+NVT-fast/Unit_tests/nvm_install_no_progress_bar * *  # fast/Unit tests/nvm_install_no_progress_bar
+NVT-fast/Unit_tests/nvm_offline_version * *  # fast/Unit tests/nvm_offline_version
+NVT-fast/Unit_tests/nvm_release_install_lock * *  # fast/Unit tests/nvm_release_install_lock
+NVT-fast/Unit_tests/nvm_write_nvmrc * *  # fast/Unit tests/nvm_write_nvmrc
+UNI-09a * *  # uninstall removes the version directory under versions/node.
+UNI-09b * *  # uninstall removes a version directory nvm did not create itself.
+
+# Uses NVM_INSTALL_THIRD_PARTY_HOOK, which nvmise does not run: mise would not know the version. 1 case.
+INS-18 * *  # A reported success that fails post-install validation exits 1 without activating.
+
+# Uses NVM_SYMLINK_CURRENT. nvmise keeps no `current` link in the nvm folder. 2 cases.
+NVT-fast/Running__nvm_use_x__should_create_and_change_the__current__symlink * *  # fast/Running 'nvm use x' should create and change the 'current' symlink
+SHL-15a * *  # NVM_SYMLINK_CURRENT=true points $NVM_DIR/current at the version in use.
+
+# Reads or writes the nvm folder's own layout by hand ($NVM_DIR/versions, $NVM_DIR/alias and the like). nvmise keeps nothing there. 73 cases.
+DLD-04 * *
+DSP-12d * *  # use on a version directory that fails install validation.
+FIL-05a * *  # alias writes one file per alias holding the target.
+FIL-05b * *  # Comments and blank lines in a hand-written alias file are ignored.
+FIL-05c * *  # Alias names with a .. component are rejected on write and read.
+FIL-05e * *  # An unreadable alias file is reported.
 FIL-06a * *
 FIL-06b * *
-FIL-06c * *
-HLP-06a * *
-INS-06a * *
-INS-06b * *
-INS-06c * *
-INS-06d * *
-INS-06e * *
-INS-07b * *
-INS-08 * *
-INS-11b * *
-INS-12a * *
-INS-12b * *
-INS-13 * *
-INS-14a * *
-INS-15a * *
-INS-15c * *
-INS-17a * *
-INS-17b * *
-INS-17c * *
-INS-19 * *
-INS-21a * *
-INS-21b * *
-INS-22 * *
-INS-23 * *
-INS-24a * *
-INS-24b * *
-INS-33b * *
-INS-36b * *
-INS-39 * *
-INS-51 * *
-NVT-fast/Unit_tests/Running__nvm_use_--save__works_as_expected_ * *
-NVT-fast/Unit_tests/Running__nvm_use_--save__works_with_a_.nvmrc_in_the_parent_dir * *
-NVT-fast/Unit_tests/Running__nvm_use_--silent_--save__doesn_t_output_anything * *
-NVT-fast/Unit_tests/nvm_acquire_install_lock * *
-NVT-fast/Unit_tests/nvm_install_--offline * *
-NVT-fast/Unit_tests/nvm_install_no_progress_bar * *
-NVT-fast/Unit_tests/nvm_ls_remote_LTS_codename_traversal * *
-NVT-fast/Unit_tests/nvm_offline_version * *
-NVT-fast/Unit_tests/nvm_release_install_lock * *
-NVT-fast/Unit_tests/nvm_write_nvmrc * *
-SHL-16d * *
-UNI-07 * *
-UNI-09a * *
-UNI-09b * *
-
-# NVM_SYMLINK_CURRENT. No `current` link is kept in the nvm folder.
-# 2 cases.
-NVT-fast/Running__nvm_use_x__should_create_and_change_the__current__symlink * *
-SHL-15a * *
-
-# The case reads or writes the nvm folder's own layout by hand ($NVM_DIR/versions, $NVM_DIR/alias and the like), where nvmise keeps nothing.
-# 75 cases.
-DSP-12d * *
-FIL-05a * *
-FIL-05b * *
-FIL-05c * *
-FIL-05e * *
 FIL-07 * *
-HLP-07b * *
-HLP-08 * *
-INS-30 * *
-INS-30b * *
-INS-30e * *
-INS-30f * *
-INS-31b * *
-INS-31c * *
-INS-32b * *
-INS-32c * *
-INS-36a * *
-INS-37 * *
-NVT-fast/Aliases/Running__nvm_alias__aliasname___should_list_but_one_alias * *
-NVT-fast/Aliases/Running__nvm_alias__lists_implicit_aliases_when_they_do_not_exist * *
-NVT-fast/Aliases/Running__nvm_alias__should_list_all_aliases * *
-NVT-fast/Aliases/_nvm_alias__should_ignore_leading_blank_lines_in_the_file * *
-NVT-fast/Aliases/circular/nvm_resolve_alias * *
-NVT-fast/Aliases/circular/nvm_resolve_local_alias * *
-NVT-fast/Aliases/lts/_nvm_alias__should_ensure_LTS_alias_dir_exists * *
-NVT-fast/Aliases/nvm_alias_handles_alias_with_spaces_in_name * *
-NVT-fast/Aliases/nvm_alias_handles_binary_data_after_version * *
-NVT-fast/Aliases/nvm_alias_handles_carriage_return * *
-NVT-fast/Aliases/nvm_alias_handles_comment-only_alias_file * *
-NVT-fast/Aliases/nvm_alias_handles_embedded_NUL * *
-NVT-fast/Aliases/nvm_alias_handles_empty_alias_file * *
-NVT-fast/Aliases/nvm_alias_handles_form_feed_and_vertical_tab * *
-NVT-fast/Aliases/nvm_alias_handles_no_trailing_newline * *
-NVT-fast/Aliases/nvm_alias_handles_unreadable_alias_file * *
-NVT-fast/Aliases/nvm_alias_handles_very_long_line * *
-NVT-fast/Aliases/nvm_alias_strips_trailing_whitespace * *
-NVT-fast/Aliases/nvm_ensure_default_set * *
-NVT-fast/Aliases/nvm_resolve_alias * *
-NVT-fast/Aliases/nvm_resolve_alias_handles_cycles * *
-NVT-fast/Aliases/nvm_resolve_alias_handles_deep_chain * *
-NVT-fast/Aliases/nvm_resolve_alias_with_nonexistent_target * *
-NVT-fast/Aliases/nvm_resolve_local_alias * *
-NVT-fast/Aliases/percent_in_alias_name/nvm_resolve_alias * *
-NVT-fast/Aliases/percent_in_alias_name/nvm_resolve_local_alias * *
-NVT-fast/Aliases/uppercase_alias_names_should_work * *
-NVT-fast/Listing_paths/Running__nvm_which_0.0.2__should_display_only_version_0.0.2 * *
-NVT-fast/Listing_versions/Running__nvm_ls__should_display_all_installed_versions * *
-NVT-fast/Listing_versions/Running__nvm_ls__should_not_show_a_trailing_slash * *
-NVT-fast/Listing_versions/Running__nvm_ls__with_node-like_versioning_vx.x.x_should_only_list_a_matched_version * *
-NVT-fast/Listing_versions/Running__nvm_ls_foo__should_return_a_nonzero_exit_code_when_not_found * *
-NVT-fast/Listing_versions/Running__nvm_ls_io__should_return_NA * *
-NVT-fast/Listing_versions/Running__nvm_ls_node___should_return_a_nonzero_exit_code_when_not_found * *
-NVT-fast/Listing_versions/Running__nvm_ls_stable__and__nvm_ls_unstable__should_return_the_appropriate_implicit_alias * *
-NVT-fast/Listing_versions/Using_a_nonstandard_IFS_should_not_break * *
-NVT-fast/Running__nvm_alias__should_create_a_file_in_the_alias_directory * *
-NVT-fast/Running__nvm_deactivate__should_unset_the_nvm_environment_variables * *
-NVT-fast/Running__nvm_unalias__should_remove_the_alias_file * *
-NVT-fast/Running__nvm_uninstall__should_clean_up_aliases_pointing_to_uninstalled_version * *
-NVT-fast/Running__nvm_uninstall__with_an_inferred_version_shows_the_inferred_message * *
-NVT-fast/Running__nvm_use_iojs__uses_latest_io.js_version * *
-NVT-fast/Unit_tests/nvm_alias_handles_comments * *
-NVT-fast/Unit_tests/nvm_alias_path_traversal * *
-NVT-fast/Unit_tests/nvm_change_path * *
-NVT-fast/Unit_tests/nvm_has_system_iojs * *
-NVT-fast/Unit_tests/nvm_has_system_node * *
-NVT-fast/Unit_tests/nvm_ls_current * *
-NVT-fast/Unit_tests/nvm_ls_handles_hash_in_pattern * *
-NVT-fast/Unit_tests/nvm_normalize_lts * *
-NVT-fast/Unit_tests/nvm_strip_path * *
-NVT-fast/Unit_tests/nvm_validate_install * *
-NVT-fast/Unit_tests/nvm_version_path * *
-SHL-09c * *
-SHL-17a * *
-UNI-04b * *
-VER-10c * *
+INS-24b * *  # A failing install-latest-npm sets the install exit code.
+INS-30 * *  # The npm suffix comes from running npm --version, and is dropped when npm is missing.
+INS-30b * *  # An npm upgraded in place reports its new version.
+INS-30e * *  # An npm that does not support the active node is run, and prints no version.
+INS-30f * *  # With no npm anywhere on PATH, no npm version is shown.
+INS-31c * *  # install-latest-npm without npm exits 2.
+INS-32b * *  # reinstall-packages reinstalls listed globals and links linked ones.
+INS-32c * *  # reinstall-packages shows the shell's cd error when a linked package's directory is gone.
+INS-36a * *  # PREFIX and any-case NPM_CONFIG_PREFIX outside NVM_DIR make nvm use exit 11 and deactivate.
+INS-36b * *  # prefix or globalconfig in a builtin, global, user or project npmrc make nvm use exit 11.
+INS-37 * *  # nvm use --delete-prefix runs npm config delete on the offending npmrc and succeeds.
+NVT-fast/Aliases/Running__nvm_alias__aliasname___should_list_but_one_alias * *  # fast/Aliases/Running 'nvm alias ˂aliasname˃' should list but one alias
+NVT-fast/Aliases/Running__nvm_alias__lists_implicit_aliases_when_they_do_not_exist * *  # fast/Aliases/Running 'nvm alias' lists implicit aliases when they do not exist
+NVT-fast/Aliases/Running__nvm_alias__should_list_all_aliases * *  # fast/Aliases/Running 'nvm alias' should list all aliases
+NVT-fast/Aliases/_nvm_alias__should_ignore_leading_blank_lines_in_the_file * *  # fast/Aliases/'nvm alias' should ignore leading blank lines in the file
+NVT-fast/Aliases/circular/nvm_resolve_alias * *  # fast/Aliases/circular/nvm_resolve_alias
+NVT-fast/Aliases/circular/nvm_resolve_local_alias * *  # fast/Aliases/circular/nvm_resolve_local_alias
+NVT-fast/Aliases/lts/_nvm_alias__should_ensure_LTS_alias_dir_exists * *  # fast/Aliases/lts/'nvm alias' should ensure LTS alias dir exists
+NVT-fast/Aliases/nvm_alias_handles_alias_with_spaces_in_name * *  # fast/Aliases/nvm_alias handles alias with spaces in name
+NVT-fast/Aliases/nvm_alias_handles_binary_data_after_version * *  # fast/Aliases/nvm_alias handles binary data after version
+NVT-fast/Aliases/nvm_alias_handles_carriage_return * *  # fast/Aliases/nvm_alias handles carriage return
+NVT-fast/Aliases/nvm_alias_handles_comment-only_alias_file * *  # fast/Aliases/nvm_alias handles comment-only alias file
+NVT-fast/Aliases/nvm_alias_handles_embedded_NUL * *  # fast/Aliases/nvm_alias handles embedded NUL
+NVT-fast/Aliases/nvm_alias_handles_empty_alias_file * *  # fast/Aliases/nvm_alias handles empty alias file
+NVT-fast/Aliases/nvm_alias_handles_form_feed_and_vertical_tab * *  # fast/Aliases/nvm_alias handles form feed and vertical tab
+NVT-fast/Aliases/nvm_alias_handles_no_trailing_newline * *  # fast/Aliases/nvm_alias handles no trailing newline
+NVT-fast/Aliases/nvm_alias_handles_unreadable_alias_file * *  # fast/Aliases/nvm_alias handles unreadable alias file
+NVT-fast/Aliases/nvm_alias_handles_very_long_line * *  # fast/Aliases/nvm_alias handles very long line
+NVT-fast/Aliases/nvm_alias_strips_trailing_whitespace * *  # fast/Aliases/nvm_alias strips trailing whitespace
+NVT-fast/Aliases/nvm_ensure_default_set * *  # fast/Aliases/nvm_ensure_default_set
+NVT-fast/Aliases/nvm_resolve_alias * *  # fast/Aliases/nvm_resolve_alias
+NVT-fast/Aliases/nvm_resolve_alias_handles_cycles * *  # fast/Aliases/nvm_resolve_alias handles cycles
+NVT-fast/Aliases/nvm_resolve_alias_handles_deep_chain * *  # fast/Aliases/nvm_resolve_alias handles deep chain
+NVT-fast/Aliases/nvm_resolve_alias_with_nonexistent_target * *  # fast/Aliases/nvm_resolve_alias with nonexistent target
+NVT-fast/Aliases/nvm_resolve_local_alias * *  # fast/Aliases/nvm_resolve_local_alias
+NVT-fast/Aliases/percent_in_alias_name/nvm_resolve_alias * *  # fast/Aliases/percent in alias name/nvm_resolve_alias
+NVT-fast/Aliases/percent_in_alias_name/nvm_resolve_local_alias * *  # fast/Aliases/percent in alias name/nvm_resolve_local_alias
+NVT-fast/Aliases/uppercase_alias_names_should_work * *  # fast/Aliases/uppercase alias names should work
+NVT-fast/Listing_paths/Running__nvm_which_0.0.2__should_display_only_version_0.0.2 * *  # fast/Listing paths/Running 'nvm which 0.0.2' should display only version 0.0.2
+NVT-fast/Listing_versions/Running__nvm_ls__should_display_all_installed_versions * *  # fast/Listing versions/Running 'nvm ls' should display all installed versions
+NVT-fast/Listing_versions/Running__nvm_ls__should_not_show_a_trailing_slash * *  # fast/Listing versions/Running 'nvm ls' should not show a trailing slash
+NVT-fast/Listing_versions/Using_a_nonstandard_IFS_should_not_break * *  # fast/Listing versions/Using a nonstandard IFS should not break
+NVT-fast/Running__nvm_alias__should_create_a_file_in_the_alias_directory * *  # fast/Running 'nvm alias' should create a file in the alias directory
+NVT-fast/Running__nvm_deactivate__should_unset_the_nvm_environment_variables * *  # fast/Running 'nvm deactivate' should unset the nvm environment variables
+NVT-fast/Running__nvm_unalias__should_remove_the_alias_file * *  # fast/Running 'nvm unalias' should remove the alias file
+NVT-fast/Running__nvm_uninstall__should_clean_up_aliases_pointing_to_uninstalled_version * *  # fast/Running 'nvm uninstall' should clean up aliases pointing to uninstalled version
+NVT-fast/Running__nvm_uninstall__with_an_inferred_version_shows_the_inferred_message * *  # fast/Running 'nvm uninstall' with an inferred version shows the inferred message
+NVT-fast/Running__nvm_use_iojs__uses_latest_io.js_version * *  # fast/Running 'nvm use iojs' uses latest io.js version
+NVT-fast/Unit_tests/nvm_alias_handles_comments * *  # fast/Unit tests/nvm_alias handles comments
+NVT-fast/Unit_tests/nvm_alias_path_traversal * *  # fast/Unit tests/nvm_alias path traversal
+NVT-fast/Unit_tests/nvm_change_path * *  # fast/Unit tests/nvm_change_path
+NVT-fast/Unit_tests/nvm_has_system_iojs * *  # fast/Unit tests/nvm_has_system_iojs
+NVT-fast/Unit_tests/nvm_has_system_node * *  # fast/Unit tests/nvm_has_system_node
+NVT-fast/Unit_tests/nvm_ls_current * *  # fast/Unit tests/nvm_ls_current
+NVT-fast/Unit_tests/nvm_ls_handles_hash_in_pattern * *  # fast/Unit tests/nvm_ls handles hash in pattern
+NVT-fast/Unit_tests/nvm_ls_remote_LTS_codename_traversal * *  # fast/Unit tests/nvm_ls_remote LTS codename traversal
+NVT-fast/Unit_tests/nvm_normalize_lts * *  # fast/Unit tests/nvm_normalize_lts
+NVT-fast/Unit_tests/nvm_strip_path * *  # fast/Unit tests/nvm_strip_path
+NVT-fast/Unit_tests/nvm_validate_install * *  # fast/Unit tests/nvm_validate_install
+NVT-fast/Unit_tests/nvm_version_path * *  # fast/Unit tests/nvm_version_path
+SHL-16d * *  # A node that cannot be started counts as printing no version: current says none.
+SHL-17a * *  # deactivate strips nvm dirs from PATH, MANPATH and NODE_PATH and unsets NVM_BIN and NVM_INC.
+UNI-04b * *  # The inferred-from form when the pattern resolves to an invalid install.
+VER-10c * *  # lts/* is N/A when the lts alias files are absent.
 
-# io.js. mise keeps Node only.
-# 1 cases.
-HLP-08b * *
-
-# The harness runs nvm's own test suite in a few sandboxes that it uses
-# again from case to case. It tidies the nvm folder in between, and knows
-# nothing of mise's folder, so a version one case installed is still there
-# for the next. Which cases that reaches depends on the order of the run.
-# 1 case so far.
-NVT-fast/Unit_tests/nvm_alias * *
+# Sends NVM_AUTH_HEADER with the download. mise does the downloading and has no setting for a header. 1 case.
+DLD-03 * *  # NVM_AUTH_HEADER is sent sanitized as an Authorization header on every download.

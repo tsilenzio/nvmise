@@ -16,8 +16,10 @@
 //! cargo test --test parity -- --ignored --nocapture
 //! ```
 //!
-//! `NVMIMIC_CASES=VER,LST-01` picks cases by the start of their names, and
-//! `NVMISE_PARITY_ALL_SHELLS=1` runs every case under all four shells.
+//! `NVMIMIC_CASES=VER,LST-01` picks cases by the start of their names,
+//! `NVMISE_PARITY_ALL_SHELLS=1` runs every case under all four shells, and
+//! `NVMISE_PARITY_RULES=none`, `=settings` or `=general` runs with fewer rules (see
+//! `rules` below).
 //! Differences that are there because Node lives in mise are listed in
 //! `tests/parity/expected`. Everything else that differs is written to
 //! `target/parity/report.txt`, and the test fails.
@@ -120,27 +122,27 @@ impl Subject for Nvmise {
             .to_vec()
     }
 
-    /// Three things in what a run printed are mise's doing and not a
-    /// difference in nvm's behaviour, so they are taken out before the
-    /// comparison:
-    ///
-    /// - mise names a version's folder without the `v`.
-    /// - mise prints its own progress and notes while it installs, each
-    ///   line starting with `mise `.
-    /// - mise puts a small script of its own in place of `bin/npm`, which
-    ///   starts npm through `node`. The harness's stand-in `node` is a
-    ///   script that can't run npm and prints what it was asked instead.
-    ///   Those lines are turned back into what the stand-in npm prints.
+    /// mise names a version's folder without the `v`. `nvm debug` writes
+    /// paths in its own way, with `${HOME}` and `${NVM_DIR}` in them.
     fn normalize(&self, text: String) -> String {
-        let store = format!("<home>/{MISE_DATA}/installs/node/");
-        let mut out = String::with_capacity(text.len());
-        for line in text.split_inclusive('\n') {
-            if line.starts_with("mise ") || line.starts_with("  node@") {
-                continue;
-            }
-            out.push_str(&npm_through_node(line).replace(&store, "<install>/v"));
+        text.replace(&format!("<home>/{MISE_DATA}/installs/node/"), "<install>/v")
+            .replace(
+                &format!("${{HOME}}/{MISE_DATA}/installs/node/"),
+                "${NVM_DIR}/versions/node/v",
+            )
+    }
+
+    /// nvm's own test suite runs in sandboxes that are used again from test
+    /// to test. The harness tidies the nvm folder in between, and this
+    /// tidies what nvmise keeps outside it: the versions in mise's folder
+    /// and the aliases.
+    fn tidy(&self, side: &Path) {
+        for folder in [
+            side.join("home").join(MISE_DATA).join("installs"),
+            side.join("own/data/alias"),
+        ] {
+            let _ = fs::remove_dir_all(folder);
         }
-        out
     }
 
     /// What mise keeps in its own folder is mise's business.
@@ -150,34 +152,29 @@ impl Subject for Nvmise {
 
     fn expected(&self) -> &Expected {
         static EXPECTED: OnceLock<Expected> = OnceLock::new();
-        EXPECTED.get_or_init(|| Expected::parse(include_str!("parity/expected")))
+        EXPECTED.get_or_init(|| Expected::parse(&rules(include_str!("parity/expected"))))
     }
 }
 
-/// The version the harness's stand-in npm answers with.
-const STAND_IN_NPM: &str = "10.9.0";
-
-/// Rewrites `node v22.1.0: <path>/npm-cli.js <args>`, which is what the
-/// stand-in `node` prints when it is handed npm to run, into what the
-/// stand-in npm prints for the same arguments.
-fn npm_through_node(line: &str) -> String {
-    const NPM: &str = "/lib/node_modules/npm/bin/npm-cli.js";
-    let Some(at) = line.find(NPM) else {
-        return line.to_string();
-    };
-    let Some(start) = line[..at].rfind("node v") else {
-        return line.to_string();
-    };
-    let rest = &line[at + NPM.len()..];
-    let args = rest.strip_prefix(' ').unwrap_or(rest);
-    let answer = match args.strip_prefix("--version") {
-        Some(after) => format!("{STAND_IN_NPM}{after}"),
-        None => match args.strip_prefix("-v") {
-            Some(after) if after.trim().is_empty() => format!("{STAND_IN_NPM}{after}"),
-            _ => format!("npm: {args}"),
-        },
-    };
-    format!("{}{answer}", &line[..start])
+/// The rules a run goes by. `NVMISE_PARITY_RULES=none` takes none of them,
+/// to count what matches with no help. `=settings` takes only the rules for
+/// where files live and which settings show. `=general` takes only the rules that
+/// hold for every case, and leaves out the ones that keep a whole case out.
+fn rules(text: &str) -> String {
+    match std::env::var("NVMISE_PARITY_RULES").as_deref() {
+        Ok("none") => String::new(),
+        Ok("settings") => text
+            .lines()
+            .filter(|line| line.starts_with("* * ") && !line.contains(" ~ "))
+            .map(|line| format!("{line}\n"))
+            .collect(),
+        Ok("general") => text
+            .lines()
+            .filter(|line| line.starts_with("* ") || line.starts_with('#'))
+            .map(|line| format!("{line}\n"))
+            .collect(),
+        _ => text.to_string(),
+    }
 }
 
 #[test]
