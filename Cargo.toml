@@ -1,7 +1,7 @@
 [package]
 name = "nvmise"
 description = "nvm's commands, with mise keeping the Node versions"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 license = "MIT"
 rust-version = "1.98"
@@ -10,11 +10,11 @@ rust-version = "1.98"
 members = ["xtask"]
 
 [dependencies]
-nvmimic = { git = "https://github.com/tsilenzio/nvmimic", tag = "v0.1.1" }
+nvmimic = { git = "https://github.com/tsilenzio/nvmimic", tag = "v1.0.0" }
 
 [dev-dependencies]
 # The harness that compares a program with official nvm, case by case.
-nvmimic-parity = { git = "https://github.com/tsilenzio/nvmimic", tag = "v0.1.1" }
+nvmimic-parity = { git = "https://github.com/tsilenzio/nvmimic", tag = "v1.0.0" }
 
 [profile.release]
 opt-level = 3

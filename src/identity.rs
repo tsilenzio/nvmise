@@ -3,7 +3,7 @@
 //! `NVMISE_DATA_DIR`, `__nvmise_handoff`.
 
 use nvmimic::complete::{Command, Flag, Needs, command, flag};
-use nvmimic::identity::{Identity, Packages, Release};
+use nvmimic::identity::{Identity, Packages, Release, Words};
 
 /// The flags every `nvmise self` command takes.
 const SELF_FLAGS: &[Flag] = &[
@@ -101,4 +101,16 @@ pub static NVMISE: Identity = Identity {
         // `self update` accepts only a download signed by that team.
         team_id: option_env!("NVMISE_TEAM_ID"),
     }),
+    // The installer's sentences about the nvm folder. nvmise uses none of
+    // the Node versions or aliases kept there.
+    words: Words {
+        takes_over: &[
+            "{app} only swaps out nvm's scripts. The Node versions and aliases already in",
+            "this folder stay where they are and go unused: {app}'s Node versions are",
+            "the ones mise keeps, and its aliases are its own.",
+        ],
+        stays: Some("The Node versions mise keeps, and the nvm folder, stay as they are."),
+        takes_over_again: "{app} self enable",
+        goes_back: Some("{app} self rollback"),
+    },
 };

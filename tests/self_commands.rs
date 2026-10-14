@@ -69,10 +69,16 @@ fn install_takes_the_nvm_folder_over_and_uninstall_gives_it_back() {
     assert!(!home.installed("nvmise") && !home.shared().exists());
 
     let said = ok(&home, "install");
-    assert!(
-        said.contains("Node versions are the ones mise keeps in"),
-        "{said}"
-    );
+    // What the installer says about the folder is true for nvmise: the
+    // versions and aliases already there are not used.
+    for line in [
+        "nvmise only swaps out nvm's scripts. The Node versions and aliases already in",
+        "this folder stay where they are and go unused: nvmise's Node versions are",
+        "Node versions are the ones mise keeps in",
+    ] {
+        assert!(said.contains(line), "no {line:?} in {said}");
+    }
+    assert!(!said.contains("drop-in replacement"), "{said}");
     assert_eq!(home.answers(), "nvmise");
     assert!(home.installed("nvmise") && home.backup_is_whole());
     assert!(home.aliases().is_dir());
@@ -95,6 +101,12 @@ fn install_takes_the_nvm_folder_over_and_uninstall_gives_it_back() {
             && plan.contains(": default, lts/iron."),
         "{plan}"
     );
+    // The aliases go, so nothing says they stay.
+    assert!(
+        plan.contains("The Node versions mise keeps, and the nvm folder, stay as they are."),
+        "{plan}"
+    );
+    assert!(!plan.contains("aliases stay"), "{plan}");
     assert!(home.aliases().join("default").is_file());
 
     // Without --force and without a terminal, nothing goes.
@@ -131,6 +143,10 @@ fn disable_goes_back_to_official_nvm_and_enable_takes_nvm_again() {
 
     let said = ok(&home, "disable");
     assert!(said.contains("Done. nvm is back in"), "{said}");
+    assert!(
+        said.contains("so `nvmise self enable` can take over again."),
+        "{said}"
+    );
     assert!(home.official_is_back());
     // Switched off, nvmise is still installed and keeps its aliases.
     assert!(home.installed("nvmise"));
