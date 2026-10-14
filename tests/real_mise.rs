@@ -288,7 +288,16 @@ fn nvm_works_through_the_real_mise_in_every_shell() {
         ("/bin/bash", "bash", &[], Mise::Activated("bash")),
         ("/bin/zsh", "zsh", &["-f"], Mise::Activated("zsh")),
         // `/bin/sh` is bash on macOS, and bash's activation runs in it.
-        ("/bin/sh", "sh", &[], Mise::Activated("bash")),
+        // Elsewhere it is usually dash, which mise has no activation for.
+        (
+            "/bin/sh",
+            "sh",
+            &[],
+            match cfg!(target_os = "macos") {
+                true => Mise::Activated("bash"),
+                false => Mise::Inherited,
+            },
+        ),
         ("/bin/dash", "dash", &[], Mise::Inherited),
     ];
     let mut installs = 0;
