@@ -177,11 +177,12 @@ impl Backend for MiseBackend {
 
     // mise unpacks releases that are already built, keeps Node only, and
     // has no `current` link. A hook that installs on its own would leave
-    // mise not knowing about the version.
+    // mise not knowing about the version. Downloads are mise's business
+    // too, so there is no nvm cache to list, clear or install from.
     fn offers(&self, needs: Needs) -> bool {
         !matches!(
             needs,
-            Needs::Source | Needs::Iojs | Needs::SymlinkCurrent | Needs::InstallHook
+            Needs::Source | Needs::Iojs | Needs::SymlinkCurrent | Needs::InstallHook | Needs::Cache
         )
     }
 

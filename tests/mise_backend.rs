@@ -515,11 +515,24 @@ fn what_mise_cannot_do_is_turned_down() {
 }
 
 #[test]
-fn the_cache_is_nvmises_own() {
+fn there_is_no_nvm_cache_to_use() {
     let world = World::new();
-    let ran = world.nvm(&["cache", "dir"]);
-    let cache = ran.out.trim_end();
-    assert!(cache.starts_with(&world.home.root.display().to_string()));
-    assert!(cache.ends_with("nvmise/nvm"), "{cache}");
-    assert!(!cache.contains(".nvm/"), "{cache}");
+    world.home.with(&["v22.1.0"]);
+    // Downloads are mise's. nvm's cache commands and an install from the
+    // cache are turned down, and official nvm's cache folder is never
+    // touched.
+    for (args, what) in [
+        (&["cache", "dir"][..], "nvm cache"),
+        (&["cache", "clear"], "nvm cache"),
+        (&["install", "--offline", "22"], "nvm install --offline"),
+    ] {
+        let ran = world.nvm(args);
+        assert_eq!(ran.outcome.status, 1, "{args:?}");
+        assert_eq!(
+            ran.err,
+            format!("`{what}` isn't available with this setup.\n"),
+            "{args:?}"
+        );
+    }
+    world.assert_nvm_dir_untouched();
 }
