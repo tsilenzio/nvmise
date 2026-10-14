@@ -1,0 +1,14 @@
+[package]
+name = "xtask"
+description = "nvmise's project tasks, run as `cargo xtask <task>`"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+nvmise = { path = ".." }
+sha2 = "0.11"
+
+[dev-dependencies]
+nvmimic = { git = "https://github.com/tsilenzio/nvmimic", tag = "v0.1.1" }

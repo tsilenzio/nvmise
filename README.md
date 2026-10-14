@@ -312,6 +312,12 @@ the full path of the program if it's somewhere else.
   alone. The differences that are there on purpose are listed in
   `tests/parity/expected`.
 
+- `cargo xtask release` builds the macOS program for a release into
+  `target/dist/`: one file for both Apple silicon and Intel, signed and
+  checked by Apple, packed with the license, plus checksums and a Homebrew
+  formula. It needs a signing certificate. `--unsigned` skips that part so
+  you can try the rest.
+
 The code is small, because the library does the heavy part:
 
 - `src/backend.rs` is the backend for mise.
@@ -321,6 +327,7 @@ The code is small, because the library does the heavy part:
   uninstall`: its folder of aliases.
 - `src/main.rs` is the program: the `self` commands, `init`, and the
   answer to the shell functions.
+- `xtask/` holds the project's own tasks, such as the release build.
 
 ## License
 
