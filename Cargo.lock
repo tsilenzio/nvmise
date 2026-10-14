@@ -90,8 +90,8 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "nvmimic"
-version = "1.0.0"
-source = "git+https://github.com/tsilenzio/nvmimic?tag=v1.0.0#2247e15db9aa2148b0eb9190bdd1c27c55802830"
+version = "1.0.1"
+source = "git+https://github.com/tsilenzio/nvmimic?tag=v1.0.1#e6f6c640a1437136480087d5e8e52fc521420778"
 dependencies = [
  "libc",
  "regex",
@@ -101,8 +101,8 @@ dependencies = [
 
 [[package]]
 name = "nvmimic-parity"
-version = "1.0.0"
-source = "git+https://github.com/tsilenzio/nvmimic?tag=v1.0.0#2247e15db9aa2148b0eb9190bdd1c27c55802830"
+version = "1.0.1"
+source = "git+https://github.com/tsilenzio/nvmimic?tag=v1.0.1#e6f6c640a1437136480087d5e8e52fc521420778"
 dependencies = [
  "nvmimic",
  "serde_json",

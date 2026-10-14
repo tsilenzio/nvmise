@@ -11,4 +11,4 @@ nvmise = { path = ".." }
 sha2 = "0.11"
 
 [dev-dependencies]
-nvmimic = { git = "https://github.com/tsilenzio/nvmimic", tag = "v1.0.0" }
+nvmimic = { git = "https://github.com/tsilenzio/nvmimic", tag = "v1.0.1" }

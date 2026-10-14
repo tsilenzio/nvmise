@@ -61,7 +61,7 @@ which 22` prints something like
 ## Status
 
 This is nvmise 1.0.0, the first regular release. It's built on nvmimic
-1.0.0, copies nvm 0.40.8, and runs on macOS. It's tested on macOS and on
+1.0.1, copies nvm 0.40.8, and runs on macOS. It's tested on macOS and on
 Linux, in four shells: bash (including the old bash 3.2 that macOS ships),
 zsh, sh and dash. There's no Linux download yet.
 
