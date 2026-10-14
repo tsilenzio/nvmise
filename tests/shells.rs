@@ -81,13 +81,12 @@ fn every_shell_runs_nvm_through_nvmise() {
             let out = run_shell(&home, shell, flags, &SCRIPT.replace("SHELL", name), mise_on);
             let said = String::from_utf8_lossy(&out.stdout);
             let errors = String::from_utf8_lossy(&out.stderr);
-            // Where mise is switched on, a loading shell is left exactly as
-            // it was, and mise hears about `nvm use`. Where it isn't, the
-            // default version goes on `PATH` and mise hears nothing.
-            let (loaded, told) = match mise_on {
-                true => ("path:same\nloaded:none bin: mise:", "22.1.0"),
-                false => ("path:changed\nloaded:v20.1.0 bin:set mise:", ""),
-            };
+            // What loading did, and that mise hears about `nvm use` only
+            // where it is switched on.
+            let (path, current, heard) = common::loaded(mise_on, "20.1.0");
+            let bin = if path == "path:same" { "" } else { "set" };
+            let loaded = format!("{path}\nloaded:{current} bin:{bin} mise:{heard}");
+            let told = if mise_on { "22.1.0" } else { "" };
             assert_eq!(
                 said,
                 format!(

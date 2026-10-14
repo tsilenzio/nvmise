@@ -218,10 +218,11 @@ case "$(command -v __nvmise_handoff)" in __nvmise_handoff) echo own:yes ;; esac
                 command.env("__MISE_DIFF", "x");
             }
             let out = command.output().unwrap();
-            let expected = match mise_on {
-                true => "path:same\nloaded:none mise:\nused:v22.1.0 mise:22.1.0\nown:yes\n",
-                false => "path:changed\nloaded:v20.1.0 mise:\nused:v22.1.0 mise:\nown:yes\n",
-            };
+            let (path, current, heard) = common::loaded(mise_on, "20.1.0");
+            let told = if mise_on { "22.1.0" } else { "" };
+            let expected = format!(
+                "{path}\nloaded:{current} mise:{heard}\nused:v22.1.0 mise:{told}\nown:yes\n"
+            );
             assert_eq!(
                 text(&out.stdout),
                 expected,

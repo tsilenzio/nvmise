@@ -9,6 +9,7 @@ use common::Home;
 use nvmimic::context::CallerShell;
 use nvmimic::shell::{Dialect, Effect, Vars};
 use nvmimic::{Caller, Outcome};
+use nvmise::backend::{AT_LOAD_WITH_MISE, AtLoad};
 use nvmise::{MiseBackend, NVMISE};
 use std::collections::BTreeMap;
 use std::fs;
@@ -431,55 +432,56 @@ fn mise_hears_about_a_switch_only_where_it_is_switched_on() {
 }
 
 #[test]
-fn a_loading_shell_is_left_alone_where_mise_is_switched_on() {
+fn a_loading_shell_follows_the_one_choice_made_for_mise() {
     let mut world = World::new();
     world.home.with(&["v20.11.1", "v22.1.0"]);
     fs::create_dir_all(world.home.aliases()).unwrap();
     fs::write(world.home.aliases().join("default"), "20\n").unwrap();
     world.set("PATH", "/usr/bin:/bin");
+    let path = format!("{}/bin:/usr/bin:/bin", world.home.path_of("v20.11.1"));
     // `nvm_auto use` is what a shell runs when it has loaded nvm.
     let load = |world: &World| world.call("nvm_auto", &["use"]);
+    let sets_path = |ran: &Ran| {
+        ran.outcome.effects.iter().any(|effect| {
+            matches!(
+                effect,
+                Effect::Set { name, value, .. } if name == "PATH" && *value == path
+            )
+        })
+    };
+    let tells_mise = |ran: &Ran| format!("{:?}", ran.outcome.effects).contains(MISE_NODE_VERSION);
 
     // Without mise in the shell, loading puts the default version on
     // `PATH` as official nvm does, and mise's variable is left alone.
     let ran = load(&world);
     assert_eq!(ran.outcome.status, 0, "{}", ran.err);
-    let path = format!("{}/bin:/usr/bin:/bin", world.home.path_of("v20.11.1"));
     assert!(
-        ran.outcome.effects.iter().any(|effect| matches!(
-            effect,
-            Effect::Set { name, value, .. } if name == "PATH" && *value == path
-        )),
-        "{:?}",
-        ran.outcome.effects
-    );
-    assert!(
-        !format!("{:?}", ran.outcome.effects).contains(MISE_NODE_VERSION),
+        sets_path(&ran) && !tells_mise(&ran),
         "{:?}",
         ran.outcome.effects
     );
 
-    // With mise switched on, nothing changes at all and nothing is printed.
+    // With mise switched on, it goes by `AT_LOAD_WITH_MISE`.
     world.set("__MISE_DIFF", "x");
     let ran = load(&world);
     assert_eq!(ran.outcome.status, 0);
-    assert_eq!(ran.outcome.effects, [], "{:?}", ran.outcome.effects);
     assert_eq!((ran.out.as_str(), ran.err.as_str()), ("", ""));
-
-    // The same holds for the text `init` prints for a new shell.
-    let shell = nvmimic::init::Shell {
-        env: world.vars.clone(),
-        dialect: Dialect::Bash,
-        caller: CallerShell::default(),
-        cache_dir: None,
-        identity: &NVMISE,
+    let expected = match AT_LOAD_WITH_MISE {
+        AtLoad::LeaveAlone => (false, false),
+        AtLoad::SetPathAndTellMise => (true, true),
+        AtLoad::SetPathOnly => (true, false),
     };
-    let text = nvmimic::init::load(&["NVM_DIR", "PATH"], shell, &world.backend());
-    let text = text.unwrap_or_default();
-    assert!(!text.contains("installs/node"), "{text}");
-    assert!(!text.contains(MISE_NODE_VERSION), "{text}");
+    assert_eq!(
+        (sets_path(&ran), tells_mise(&ran)),
+        expected,
+        "{:?}",
+        ran.outcome.effects
+    );
+    if AT_LOAD_WITH_MISE == AtLoad::LeaveAlone {
+        assert_eq!(ran.outcome.effects, []);
+    }
 
-    // `nvm use` typed by someone still works there, and tells mise.
+    // `nvm use` typed by someone always works there, and tells mise.
     let ran = world.nvm(&["use", "default"]);
     assert_eq!(ran.outcome.status, 0, "{}", ran.err);
     world.apply(&ran);

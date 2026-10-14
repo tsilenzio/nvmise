@@ -15,6 +15,10 @@
 //! every `nvm install` below is mise really fetching, checking and unpacking
 //! a release, with nothing more coming from the internet. The test prints
 //! what mise asked the mirror for and what mise said.
+//!
+//! Each shell goes through three steps, with mise switched off and on:
+//! install and use a version, open a new shell and see what loading nvm
+//! does there, and uninstall the version.
 
 mod common;
 
@@ -190,7 +194,8 @@ enum Mise {
     Inherited,
 }
 
-const SCRIPT: &str = r#"
+/// Step one: install a version and use it.
+const INSTALL: &str = r#"
 @PRELUDE@
 eval "$("$NVMISE" init @SHELL@)" || exit 90
 nvm install @VERSION@ || exit 91
@@ -206,6 +211,35 @@ echo "mise-picks:$(command mise which node 2>/dev/null)"
 echo "after-prompt:$(command -v node)"
 nvm deactivate >/dev/null 2>&1
 echo "deactivated told:${MISE_NODE_VERSION-}"
+echo done
+"#;
+
+/// Step two: a new shell loads nvm. `nvm install` made the version the
+/// `default` alias, which official nvm switches every new shell to. The
+/// lines starting with `load ` are the record of what the shell ends up
+/// with, and the test prints them together at the end.
+const LOAD: &str = r#"
+@PRELUDE@
+before="$PATH"
+eval "$("$NVMISE" init @SHELL@)" || exit 90
+[ "$before" = "$PATH" ] && echo "load PATH: unchanged" || echo "load PATH: changed, first entry ${PATH%%:*}"
+echo "load nvm current: $(nvm current)"
+echo "load NVM_BIN: ${NVM_BIN-}"
+echo "load MISE_NODE_VERSION: ${MISE_NODE_VERSION-}"
+echo "load node on PATH: $(command -v node) $(node --version 2>/dev/null)"
+@HOOK@
+echo "load node after the next prompt: $(command -v node) $(node --version 2>/dev/null)"
+cd "$HOME/project" || exit 94
+@HOOK@
+echo "load node in a folder with its own mise.toml: $(command -v node) $(node --version 2>/dev/null)"
+echo done
+"#;
+
+/// Step three: uninstall the version.
+const UNINSTALL: &str = r#"
+@PRELUDE@
+eval "$("$NVMISE" init @SHELL@)" || exit 90
+nvm deactivate >/dev/null 2>&1
 nvm uninstall @VERSION@ || exit 93
 echo "left:$(ls "$MISE_DATA_DIR/installs/node" 2>/dev/null | tr '\n' ' ')"
 echo done
@@ -241,6 +275,14 @@ fn nvm_works_through_the_real_mise_in_every_shell() {
     fs::remove_file(&mise).unwrap();
     std::os::unix::fs::symlink(real_mise(), &mise).unwrap();
     let store = home.path_of(version);
+    // A project folder that asks mise for the version by itself.
+    let project = home.root.join("project");
+    fs::create_dir_all(&project).unwrap();
+    fs::write(
+        project.join("mise.toml"),
+        format!("[tools]\nnode = \"{version}\"\n"),
+    )
+    .unwrap();
 
     let shells: [(&str, &str, &[&str], Mise); 4] = [
         ("/bin/bash", "bash", &[], Mise::Activated("bash")),
@@ -250,11 +292,14 @@ fn nvm_works_through_the_real_mise_in_every_shell() {
         ("/bin/dash", "dash", &[], Mise::Inherited),
     ];
     let mut installs = 0;
+    // What a new shell ended up with after loading nvm, per shell.
+    let mut loads: Vec<(String, Vec<String>)> = Vec::new();
     for (shell, name, flags, switched_on) in shells {
         if !Path::new(shell).is_file() {
             continue;
         }
         for how in [Mise::Off, switched_on] {
+            let label = format!("{shell}, mise {how:?}");
             let (prelude, hook) = match how {
                 Mise::Activated(kind) => (
                     format!("eval \"$(mise activate {kind})\""),
@@ -263,46 +308,55 @@ fn nvm_works_through_the_real_mise_in_every_shell() {
                 ),
                 _ => (String::new(), ":"),
             };
-            let script = SCRIPT
-                .replace("@PRELUDE@", &prelude)
-                .replace("@HOOK@", hook)
-                .replace("@SHELL@", name)
-                .replace("@VERSION@", version);
-            let mut command = match how {
-                Mise::Inherited => {
-                    let mut bash = Command::new("/bin/bash");
-                    bash.args([
-                        "-c",
-                        "eval \"$(mise activate bash)\"; exec \"$0\" -c \"$1\"",
-                        shell,
-                        &script,
-                    ]);
-                    bash
-                }
-                _ => {
-                    let mut plain = Command::new(shell);
-                    plain.args(flags).args(["-c", &script]);
-                    plain
-                }
+            // Runs one step in a shell of its own and returns what it said.
+            let run = |step: &str, script: &str| -> String {
+                let script = script
+                    .replace("@PRELUDE@", &prelude)
+                    .replace("@HOOK@", hook)
+                    .replace("@SHELL@", name)
+                    .replace("@VERSION@", version);
+                let mut command = match how {
+                    Mise::Inherited => {
+                        let mut bash = Command::new("/bin/bash");
+                        bash.args([
+                            "-c",
+                            "eval \"$(mise activate bash)\"; exec \"$0\" -c \"$1\"",
+                            shell,
+                            &script,
+                        ]);
+                        bash
+                    }
+                    _ => {
+                        let mut plain = Command::new(shell);
+                        plain.args(flags).args(["-c", &script]);
+                        plain
+                    }
+                };
+                let out = command
+                    .env_clear()
+                    .envs(home.vars())
+                    .env("NVMISE", NVMISE)
+                    .env("NVM_NODEJS_ORG_MIRROR", &mirror)
+                    // mise reads a project's `mise.toml` only once the
+                    // folder is trusted.
+                    .env("MISE_TRUSTED_CONFIG_PATHS", &home.root)
+                    .env("PATH", format!("{}:/usr/bin:/bin", home.bin().display()))
+                    .env("SHELL", shell)
+                    .env("TERM", "dumb")
+                    .current_dir(&home.root)
+                    .stdin(Stdio::null())
+                    .output()
+                    .unwrap();
+                let said = String::from_utf8_lossy(&out.stdout).into_owned();
+                let errors = String::from_utf8_lossy(&out.stderr);
+                println!("=== {label}: {step}\n{said}--- stderr\n{errors}");
+                assert!(out.status.success(), "{label}, {step}: {:?}", out.status);
+                assert!(said.ends_with("done\n"), "{label}, {step}");
+                said
             };
-            let out = command
-                .env_clear()
-                .envs(home.vars())
-                .env("NVMISE", NVMISE)
-                .env("NVM_NODEJS_ORG_MIRROR", &mirror)
-                .env("PATH", format!("{}:/usr/bin:/bin", home.bin().display()))
-                .env("SHELL", shell)
-                .env("TERM", "dumb")
-                .current_dir(&home.root)
-                .stdin(Stdio::null())
-                .output()
-                .unwrap();
-            let said = String::from_utf8_lossy(&out.stdout);
-            let errors = String::from_utf8_lossy(&out.stderr);
-            println!("=== {shell}, mise {how:?}\n{said}--- stderr\n{errors}");
-            let label = format!("{shell}, mise {how:?}");
-            assert!(out.status.success(), "{label}: {:?}", out.status);
+            let _ = fs::remove_dir_all(home.aliases());
 
+            let said = run("install", INSTALL);
             // mise fetched the release from the mirror nvmise passed on, and
             // not from anywhere else.
             installs += 1;
@@ -324,8 +378,6 @@ fn nvm_works_through_the_real_mise_in_every_shell() {
                 format!("used:v{version} told:{told}\n"),
                 format!("after-prompt:{store}/bin/node\n"),
                 "deactivated told:\n".to_string(),
-                format!("Uninstalled node v{version}\n"),
-                "done\n".to_string(),
             ] {
                 assert!(said.contains(&line), "{label}: no {line:?}");
             }
@@ -341,10 +393,66 @@ fn nvm_works_through_the_real_mise_in_every_shell() {
                     "{label}"
                 );
             }
+
+            // A new shell. What it ends up with is written down for the
+            // end of the run. Without mise, loading nvm puts the default
+            // version on `PATH`, as official nvm does. With mise switched
+            // on it follows the one choice made in `nvmise::backend`.
+            let said = run("load", LOAD);
+            let record: Vec<String> = said
+                .lines()
+                .filter_map(|line| line.strip_prefix("load "))
+                .map(|line| line.replace(&home.root.display().to_string(), "<home>"))
+                .collect();
+            let (path, current, heard) = common::loaded(how != Mise::Off, version);
+            let changed = match path {
+                "path:same" => "PATH: unchanged".to_string(),
+                _ => format!("PATH: changed, first entry {store}/bin"),
+            };
+            for line in [
+                changed,
+                format!("MISE_NODE_VERSION: {heard}"),
+                format!(
+                    "NVM_BIN: {}",
+                    match path {
+                        "path:same" => String::new(),
+                        _ => format!("{store}/bin"),
+                    }
+                ),
+            ] {
+                let line = line.replace(&home.root.display().to_string(), "<home>");
+                assert!(record.contains(&line), "{label}: no {line:?} in {record:?}");
+            }
+            // `nvm current` asks whatever `node` is on `PATH`, and with
+            // mise switched on that can be mise's stand-in for it. So it
+            // is only checked where nothing else has a say.
+            if how == Mise::Off {
+                assert!(
+                    record.contains(&format!("nvm current: {current}")),
+                    "{label}: {record:?}"
+                );
+            }
+            loads.push((label.clone(), record));
+
+            let said = run("uninstall", UNINSTALL);
+            assert!(
+                said.contains(&format!("Uninstalled node v{version}\n")),
+                "{label}"
+            );
             assert!(!home.folder(version).exists(), "{label}");
         }
     }
 
+    println!(
+        "=== what a new shell ends up with at load (choice: {:?})",
+        nvmise::backend::AT_LOAD_WITH_MISE
+    );
+    for (label, record) in &loads {
+        println!("{label}");
+        for line in record {
+            println!("  {line}");
+        }
+    }
     println!("=== what mise asked the mirror for");
     for line in seen.lock().unwrap().iter() {
         println!("{line}");

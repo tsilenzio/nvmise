@@ -28,6 +28,24 @@ const MISE_ACTIVE: &str = "__MISE_DIFF";
 /// config file.
 const MISE_NODE_VERSION: &str = "MISE_NODE_VERSION";
 
+/// What a new shell does about nvm's default version where mise is
+/// switched on. Official nvm switches every new shell to the `default`
+/// alias, and mise wants to pick the Node version itself.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AtLoad {
+    /// Nothing changes when the shell loads nvm. mise decides.
+    LeaveAlone,
+    /// The default version goes on `PATH` and mise is told, so it stays.
+    SetPathAndTellMise,
+    /// The default version goes on `PATH` and mise is not told. Where mise
+    /// has a prompt to work at, it puts its own pick back there.
+    SetPathOnly,
+}
+
+/// The one place that decides it. A shell without mise is not affected:
+/// there the default version goes on `PATH`, as with official nvm.
+pub const AT_LOAD_WITH_MISE: AtLoad = AtLoad::LeaveAlone;
+
 pub struct MiseBackend {
     /// mise's `installs/node` folder.
     store: PathBuf,
@@ -187,23 +205,28 @@ impl Backend for MiseBackend {
         Some(tools::run_through(nvm, mise))
     }
 
-    // nvm switches a new shell to the default version without being
-    // asked. Where mise is switched on, mise picks the Node version, so
-    // the new shell is left exactly as it is.
     fn switches_at_load(&self, vars: &Vars) -> bool {
-        !vars.is_set(MISE_ACTIVE)
+        !(vars.is_set(MISE_ACTIVE) && AT_LOAD_WITH_MISE == AtLoad::LeaveAlone)
     }
 
     fn switched(&self, vars: &mut Vars, version: Option<&str>, reason: Reason) {
-        // mise only hears about a switch someone asked for. Without mise
-        // switched on in this shell, nothing undoes nvm's change to `PATH`,
-        // so there is nothing to tell.
-        if reason != Reason::Asked || !vars.is_set(MISE_ACTIVE) {
+        // Without mise switched on in this shell, nothing undoes nvm's
+        // change to `PATH`, so there is nothing to tell.
+        if !vars.is_set(MISE_ACTIVE) {
+            return;
+        }
+        // mise always hears about a switch someone asked for. Whether it
+        // hears about the one a loading shell makes is `AT_LOAD_WITH_MISE`.
+        let tell = match reason {
+            Reason::Loading => AT_LOAD_WITH_MISE == AtLoad::SetPathAndTellMise,
+            _ => true,
+        };
+        if !tell {
             return;
         }
         match version {
             // mise puts its own pick of Node back on `PATH` before every
-            // prompt. This makes the version `nvm use` chose that pick.
+            // prompt. This makes the version nvm switched to that pick.
             Some(version) => vars.export(MISE_NODE_VERSION, plain(version)),
             None if vars.is_set(MISE_NODE_VERSION) => vars.unset(MISE_NODE_VERSION),
             None => {}

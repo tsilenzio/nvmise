@@ -215,3 +215,17 @@ impl Home {
         })
     }
 }
+
+/// What a new shell shows once it has loaded nvm, as the tests print it:
+/// whether `PATH` changed, the version in use, and what mise was told.
+/// `default` is the `default` alias's version without its `v`. With mise
+/// switched on this follows the one choice made in `nvmise::backend`.
+pub fn loaded(mise_on: bool, default: &str) -> (&'static str, String, String) {
+    use nvmise::backend::{AT_LOAD_WITH_MISE, AtLoad};
+    let switched = ("path:changed", format!("v{default}"));
+    match (mise_on, AT_LOAD_WITH_MISE) {
+        (false, _) | (true, AtLoad::SetPathOnly) => (switched.0, switched.1, String::new()),
+        (true, AtLoad::SetPathAndTellMise) => (switched.0, switched.1, default.to_string()),
+        (true, AtLoad::LeaveAlone) => ("path:same", "none".to_string(), String::new()),
+    }
+}
