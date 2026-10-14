@@ -9,6 +9,10 @@ rust-version = "1.98"
 [dependencies]
 nvmimic = { git = "https://github.com/tsilenzio/nvmimic", tag = "v0.1.1" }
 
+[dev-dependencies]
+# The harness that compares a program with official nvm, case by case.
+nvmimic-parity = { git = "https://github.com/tsilenzio/nvmimic", tag = "v0.1.1" }
+
 [profile.release]
 opt-level = 3
 lto = true

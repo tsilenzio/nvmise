@@ -100,10 +100,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "nvmimic-parity"
+version = "0.1.1"
+source = "git+https://github.com/tsilenzio/nvmimic?tag=v0.1.1#a2b5e5d72afd72ac342e96ec8aeac78ffad6b73b"
+dependencies = [
+ "nvmimic",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "nvmise"
 version = "0.1.0"
 dependencies = [
  "nvmimic",
+ "nvmimic-parity",
 ]
 
 [[package]]
