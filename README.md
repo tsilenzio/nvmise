@@ -1,11 +1,6 @@
 # nvmise
 
 > [!IMPORTANT]
-> **nvmise has no release yet.** Everything described here is built and
-> tested, but there's no download and no Homebrew formula, so for now you
-> build it yourself. Few people have used it. Keep `nvmise self uninstall`
-> in mind as the way back.
->
 > nvmise isn't affiliated with nvm-sh, the nvm project, the OpenJS
 > Foundation or mise.
 
@@ -65,9 +60,29 @@ which 22` prints something like
 
 ## Status
 
-This is nvmise 0.1.0, not released yet. It's built on nvmimic 0.1.1 and
-tested on macOS, in four shells: bash (including the old bash 3.2 that
-macOS ships), zsh, sh and dash.
+This is nvmise 1.0.0, the first regular release. It's built on nvmimic
+1.0.0, copies nvm 0.40.8, and runs on macOS. It's tested on macOS and on
+Linux, in four shells: bash (including the old bash 3.2 that macOS ships),
+zsh, sh and dash. There's no Linux download yet.
+
+Here is what the 1.0 covers:
+
+- `nvm` in your shell does what nvm 0.40.8 does, apart from the differences
+  listed under [What's different from nvm](#whats-different-from-nvm).
+- The `nvmise` commands (`self install` and its siblings, and `init`) keep
+  doing what this README says, with the same flags.
+- How nvmise and mise share a shell stays as
+  [described below](#nvmise-and-mise-in-the-same-shell). A new shell never
+  overrides mise.
+- The places nvmise keeps its files, and the settings that move them, stay
+  the same.
+
+A change that breaks one of those waits for 2.0. The lines mise itself
+prints while it installs are mise's and can change with mise. The Rust code
+in this repository isn't meant to be used as a library.
+
+nvmise is new. If something doesn't work for you, `nvmise self disable`
+hands `nvm` to nvmimic or to official nvm and keeps nvmise for later.
 
 How close it is to nvm gets measured. nvmimic has a test harness that runs
 official nvm and another program side by side and compares everything they
@@ -76,20 +91,31 @@ differs is listed under [What's different from nvm](#whats-different-from-nvm).
 
 ## Installing
 
-You need mise. There's no download of nvmise yet, so build it with
+You need [mise](https://mise.jdx.dev) first.
+
+On a Mac, [Homebrew](https://brew.sh) is the short way. nvmise comes from
+the same tap as the author's other tools:
+
+```sh
+brew install tsilenzio/tap/nvmise
+nvmise self install
+```
+
+Or download the program yourself. One file runs on both Apple silicon and
+Intel Macs:
+
+```sh
+curl -LO https://github.com/tsilenzio/nvmise/releases/latest/download/nvmise-darwin-universal.tar.gz
+tar -xzf nvmise-darwin-universal.tar.gz
+./nvmise/nvmise self install
+```
+
+There's no download for Linux yet. There, and anywhere else, build it with
 [Rust](https://www.rust-lang.org):
 
 ```sh
 cargo build --release
 ./target/release/nvmise self install
-```
-
-Once there's a release, [Homebrew](https://brew.sh) will be the short way,
-from the same tap as the author's other tools. This doesn't work yet:
-
-```sh
-brew install tsilenzio/tap/nvmise
-nvmise self install
 ```
 
 `nvmise self install` sets nvmise up for `$NVM_DIR` (usually `~/.nvm`). It
@@ -162,11 +188,16 @@ uninstall` before `brew uninstall nvmise`.
 
 ### Updating nvmise
 
-`nvmise self update` will get the newest nvmise, check the download and
-swap it in, and `nvmise self rollback` will bring the old one back. Both
-are built, but there's no release to update to yet. A copy you built
-yourself can't check who signed a download, so it refuses to update
-itself. Build the newer version the same way you built this one.
+`nvmise self update` gets the newest nvmise. Before anything changes, it
+checks the download: the checksum matches, nvmise's developer signed it,
+and it runs. Then it swaps the new program in and keeps the old one.
+`nvmise self rollback` brings the old one back.
+
+If you installed nvmise with Homebrew or cargo, update it with that tool
+instead. `self update` tells you the command.
+
+A copy you built yourself can't check who signed a download, so it refuses
+to update itself. Build the newer version the same way you built this one.
 
 ## Switching nvmise off and on
 
@@ -254,6 +285,10 @@ would make mise install it without a word.
   and `Checksums matched!`. With nvmise you see mise's own progress lines
   there. `Downloading and installing node v22.1.0...` and `Now using node
   v22.1.0 (npm v10.7.0)` are the same.
+- **No `NVM_AUTH_HEADER`.** nvm sends that header with its downloads from
+  a mirror that needs one. mise does the downloading and has no setting for
+  a header, so a mirror that needs one doesn't work through nvmise. mise
+  does read `~/.netrc`.
 - **No io.js.** mise keeps Node only.
 - **No `current` link.** `NVM_SYMLINK_CURRENT` makes no link in the nvm
   folder.
