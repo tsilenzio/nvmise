@@ -289,8 +289,17 @@ has a variable that moves it. Set it before you run `self install`.
 | Official nvm's scripts and who answers `nvm`, shared with nvmimic | `~/.local/state/nvmimic-shared` | `NVMIMIC_SHARED_DIR` |
 | Install locks and remembered answers, safe to delete | `~/Library/Caches/nvmise` on macOS, `~/.cache/nvmise` elsewhere | `NVMISE_CACHE_DIR` |
 
-nvmise looks for the `mise` program on your `PATH`. Set `NVMISE_MISE` to
-the full path of the program if it's somewhere else.
+nvmise looks for the `mise` program on your `PATH`. A script often runs
+with a short `PATH` that leaves mise out, so nvmise then also looks where
+mise is usually installed: `~/.local/bin/mise`, `/opt/homebrew/bin/mise`,
+`/usr/local/bin/mise` and `/usr/bin/mise`. Set `NVMISE_MISE` to the full
+path of the program if it's somewhere else. Once that is set, nvmise looks
+nowhere else.
+
+Only `nvm install` and `nvm uninstall` need mise. Listing versions, `nvm
+use`, `nvm which` and the rest read mise's folder and work without the
+program. If mise can't be found, those two commands say so and change
+nothing. nvmise never puts mise on your `PATH` for you.
 
 ## Working on it
 

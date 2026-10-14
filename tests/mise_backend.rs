@@ -9,7 +9,7 @@ use common::Home;
 use nvmimic::context::CallerShell;
 use nvmimic::shell::{Dialect, Effect, Vars};
 use nvmimic::{Caller, Outcome};
-use nvmise::backend::{AT_LOAD_WITH_MISE, AtLoad};
+use nvmise::backend::{AT_LOAD_WITH_MISE, AtLoad, Mise};
 use nvmise::{MiseBackend, NVMISE};
 use std::collections::BTreeMap;
 use std::fs;
@@ -321,11 +321,18 @@ fn without_mise_nothing_is_installed_or_removed() {
     world.home.with(&["v20.11.1"]);
     world.set("NVM_NODEJS_ORG_MIRROR", &serve_index());
     world.set("PATH", "/usr/bin:/bin");
+    // `NVMISE_MISE` is the only place looked in once it is set, so this is
+    // a machine without mise whatever is installed on the real one.
+    let nowhere = world.home.root.join("no-such/mise").display().to_string();
+    world.set("NVMISE_MISE", &nowhere);
+    let no_mise = format!(
+        "NVMISE_MISE says the mise program is at {nowhere}, and there is no program there."
+    );
 
     let ran = world.nvm(&["install", "22"]);
     assert_eq!(ran.outcome.status, 127, "{}", ran.err);
     assert!(
-        ran.err.contains("nvmise: could not find the mise program."),
+        ran.err.contains(&format!("nvmise: {no_mise}\n")),
         "{}",
         ran.err
     );
@@ -334,18 +341,49 @@ fn without_mise_nothing_is_installed_or_removed() {
     assert_eq!(ran.outcome.status, 1);
     assert_eq!(
         ran.err,
-        "nvm: could not uninstall v20.11.1: could not find the mise program\n"
+        format!("nvm: could not uninstall v20.11.1: {no_mise}\n")
     );
     assert!(world.home.folder("v20.11.1").exists());
 
-    // `NVMISE_MISE` names a mise that isn't on `PATH`.
-    world.set(
-        "NVMISE_MISE",
-        &world.home.bin().join("mise").display().to_string(),
+    // Everything that only reads mise's folder works without mise.
+    assert_eq!(world.call("nvm_ls", &[]).out, "v20.11.1\n");
+    let ran = world.nvm(&["use", "20"]);
+    assert_eq!(ran.outcome.status, 0, "{}", ran.err);
+    assert_eq!(world.nvm(&["which", "20"]).outcome.status, 0);
+}
+
+#[test]
+fn mise_is_found_where_it_usually_is_when_path_leaves_it_out() {
+    let mut world = World::new();
+    world.home.with(&["v20.11.1"]);
+    // The stand-in mise, moved to where mise's own installer puts it.
+    let usual = world.home.root.join(".local/bin");
+    fs::create_dir_all(&usual).unwrap();
+    fs::rename(world.home.bin().join("mise"), usual.join("mise")).unwrap();
+    // A script's short `PATH`, without mise, and nothing said about where
+    // mise is.
+    world.set("PATH", "/usr/bin:/bin");
+    world.vars.remove("NVMISE_MISE");
+
+    assert_eq!(
+        world.backend().find_mise("/usr/bin:/bin"),
+        Mise::Elsewhere(usual.join("mise"))
     );
     let ran = world.nvm(&["uninstall", "20"]);
     assert_eq!(ran.outcome.status, 0, "{}", ran.err);
+    assert!(world.home.mise_log().starts_with("uninstall node@20.11.1 "));
     assert!(!world.home.folder("v20.11.1").exists());
+
+    // On `PATH` beats the usual places, and `NVMISE_MISE` beats both.
+    let on_path = world.home.bin().join("mise");
+    fs::copy(usual.join("mise"), &on_path).unwrap();
+    let path = world.home.bin().display().to_string();
+    assert_eq!(world.backend().find_mise(&path), Mise::OnPath(on_path));
+    world.set("NVMISE_MISE", &usual.join("mise").display().to_string());
+    assert_eq!(
+        world.backend().find_mise(&path),
+        Mise::Named(usual.join("mise"))
+    );
 }
 
 #[test]

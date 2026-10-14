@@ -53,9 +53,11 @@ pub struct MiseBackend {
     /// Where nvm's install locks go, away from official nvm's own
     /// `$NVM_DIR/.cache`.
     cache: PathBuf,
-    /// The mise program, when `NVMISE_MISE` names it. Otherwise it is looked
-    /// up on the calling shell's `PATH`.
+    /// The mise program, when `NVMISE_MISE` names it. Nothing else is tried
+    /// then.
     mise: Option<PathBuf>,
+    /// Where mise usually is, for a shell whose `PATH` doesn't have it.
+    usual: Vec<PathBuf>,
 }
 
 impl MiseBackend {
@@ -78,7 +80,14 @@ impl MiseBackend {
             store: installs.join("node"),
             aliases: dirs.data.join("alias"),
             cache: dirs.cache.join("nvm"),
-            mise: absolute("NVMISE_MISE"),
+            // A setting that isn't a full path still counts as set, so
+            // nvmise never guesses past what it was told.
+            mise: var("NVMISE_MISE").map(PathBuf::from),
+            usual: absolute("HOME")
+                .map(|home| home.join(".local/bin/mise"))
+                .into_iter()
+                .chain(USUAL_PLACES.iter().map(PathBuf::from))
+                .collect(),
         })
     }
 
@@ -104,13 +113,47 @@ impl MiseBackend {
         self.store.display().to_string()
     }
 
+    /// Finds the mise program for a shell with this `PATH`: the one
+    /// `NVMISE_MISE` names and no other, or else the first `mise` on `PATH`,
+    /// or else one in the places mise is usually installed to. A script
+    /// often runs with a short `PATH` that leaves mise out, and `nvm
+    /// install` should still work there.
+    pub fn find_mise(&self, path: &str) -> Mise {
+        if let Some(named) = &self.mise {
+            return match backend::is_executable(named) && named.is_file() {
+                true => Mise::Named(named.clone()),
+                false => Mise::Missing,
+            };
+        }
+        if let Some(found) = paths::which(path, "mise") {
+            return Mise::OnPath(PathBuf::from(found));
+        }
+        self.usual
+            .iter()
+            .find(|place| place.is_file() && backend::is_executable(place))
+            .map_or(Mise::Missing, |place| Mise::Elsewhere(place.clone()))
+    }
+
+    /// What to say when mise can't be found.
+    fn no_mise(&self) -> String {
+        match &self.mise {
+            Some(named) => format!(
+                "NVMISE_MISE says the mise program is at {}, and there is no program there.",
+                named.display()
+            ),
+            None => "could not find the mise program. Put mise on your PATH, or set \
+                     NVMISE_MISE to where it is."
+                .to_string(),
+        }
+    }
+
     /// The mise program, set up the way the calling shell would start it:
     /// with the shell's exported variables, in the shell's folder. It gets
     /// nothing to read, so it can never stop and ask a question.
     fn mise(&self, vars: &Vars) -> Option<Command> {
-        let program = match &self.mise {
-            Some(program) => program.clone(),
-            None => PathBuf::from(paths::which(vars.get("PATH"), "mise")?),
+        let program = match self.find_mise(vars.get("PATH")) {
+            Mise::Named(program) | Mise::OnPath(program) | Mise::Elsewhere(program) => program,
+            Mise::Missing => return None,
         };
         let mut command = Command::new(program);
         command
@@ -124,7 +167,24 @@ impl MiseBackend {
     }
 }
 
-const NO_MISE: &str = "nvmise: could not find the mise program. Put mise on your PATH, or set NVMISE_MISE to where it is.";
+/// Where the mise program was found.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Mise {
+    /// Where `NVMISE_MISE` says it is.
+    Named(PathBuf),
+    OnPath(PathBuf),
+    /// Not on `PATH`, but in one of the places mise is usually installed to.
+    Elsewhere(PathBuf),
+    Missing,
+}
+
+/// Where mise's own installer, Homebrew and Linux packages put the program.
+/// `~/.local/bin/mise` is tried before these.
+const USUAL_PLACES: [&str; 3] = [
+    "/opt/homebrew/bin/mise",
+    "/usr/local/bin/mise",
+    "/usr/bin/mise",
+];
 
 impl Backend for MiseBackend {
     fn root(&self, vars: &Vars) -> String {
@@ -158,7 +218,7 @@ impl Backend for MiseBackend {
     fn remove(&self, vars: &Vars, version: &str) -> io::Result<()> {
         let mut mise = self
             .mise(vars)
-            .ok_or_else(|| io::Error::other("could not find the mise program"))?;
+            .ok_or_else(|| io::Error::other(self.no_mise()))?;
         let output = mise
             .args(["uninstall", &format!("node@{}", plain(version))])
             .output()?;
@@ -188,7 +248,7 @@ impl Backend for MiseBackend {
 
     fn install(&self, nvm: &mut Nvm, request: &InstallRequest) -> Option<i32> {
         let Some(mut mise) = self.mise(&nvm.vars) else {
-            nvm.io.err(NO_MISE);
+            nvm.io.err(&format!("nvmise: {}", self.no_mise()));
             return Some(127);
         };
         nvm.io.echo(&text::install::downloading_and_installing(

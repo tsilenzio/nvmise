@@ -6,8 +6,8 @@
 //! look after the one thing only nvmise has, its folder of aliases.
 
 use crate::MiseBackend;
+use crate::backend::Mise;
 use nvmimic::install::{Leaving, Manifest, Site, Steps, Ui};
-use nvmimic::nvm::paths;
 use std::fs;
 use std::path::Path;
 
@@ -45,11 +45,23 @@ impl Steps for MiseSteps<'_> {
             self.0.store().display()
         ));
         let path = std::env::var("PATH").unwrap_or_default();
-        if std::env::var_os("NVMISE_MISE").is_none() && paths::which(&path, "mise").is_none() {
-            ui.say(
-                "mise isn't on your PATH. `nvm install` and `nvm uninstall` need it. \
-                 Install mise, or set NVMISE_MISE to where it is.",
-            );
+        match self.0.find_mise(&path) {
+            Mise::Named(_) | Mise::OnPath(_) => {}
+            Mise::Elsewhere(found) => {
+                ui.say(&format!(
+                    "mise isn't on your PATH. nvmise found it at {} and uses that for `nvm \
+                     install` and `nvm uninstall`.",
+                    found.display()
+                ));
+                ui.say(
+                    "mise's own `npm` calls `mise` by name after `npm install -g`, so put mise \
+                     on your PATH for that.",
+                );
+            }
+            Mise::Missing => ui.say(
+                "nvmise could not find the mise program. `nvm install` and `nvm uninstall` \
+                 need it. Install mise, or set NVMISE_MISE to where it is.",
+            ),
         }
         Ok(())
     }

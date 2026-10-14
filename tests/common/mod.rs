@@ -114,6 +114,10 @@ impl Home {
             ("MISE_STATE_DIR".to_string(), inside("mise/state")),
             // Where mise looks for settings that apply to the whole machine.
             ("MISE_SYSTEM_DIR".to_string(), inside("mise/system")),
+            // nvmise looks for mise in its usual places when `PATH` has
+            // none. Naming the stand-in here stops it from ever finding the
+            // mise of the person running the tests.
+            ("NVMISE_MISE".to_string(), inside("bin/mise")),
         ]
     }
 
