@@ -10,7 +10,7 @@
 //! Aliases such as `default` are nvm's idea and mise has nothing like them,
 //! so nvmise keeps them in a folder of its own.
 
-use nvmimic::backend::{self, Backend, Flavor, Flavors, InstallRequest, Installed};
+use nvmimic::backend::{self, Backend, Flavor, Flavors, InstallRequest, Installed, Reason};
 use nvmimic::complete::Needs;
 use nvmimic::context::Nvm;
 use nvmimic::dirs::Dirs;
@@ -38,8 +38,6 @@ pub struct MiseBackend {
     /// The mise program, when `NVMISE_MISE` names it. Otherwise it is looked
     /// up on the calling shell's `PATH`.
     mise: Option<PathBuf>,
-    /// Whether this is for a shell that is only now loading nvm.
-    loading: bool,
 }
 
 impl MiseBackend {
@@ -63,21 +61,12 @@ impl MiseBackend {
             aliases: dirs.data.join("alias"),
             cache: dirs.cache.join("nvm"),
             mise: absolute("NVMISE_MISE"),
-            loading: false,
         })
     }
 
     /// [`MiseBackend::resolve`] for this process's environment.
     pub fn from_process() -> Option<MiseBackend> {
         MiseBackend::resolve(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
-    }
-
-    /// For a shell that is only now loading nvm. nvm switches such a shell
-    /// to the default version without being asked. mise is not told about
-    /// that switch, so it never beats what mise itself picked.
-    pub fn while_loading(mut self) -> MiseBackend {
-        self.loading = true;
-        self
     }
 
     /// The folder of one version. mise's names have no `v` in front.
@@ -198,10 +187,18 @@ impl Backend for MiseBackend {
         Some(tools::run_through(nvm, mise))
     }
 
-    fn switched(&self, vars: &mut Vars, version: Option<&str>) {
-        // Without mise switched on in this shell, nothing undoes nvm's
-        // change to `PATH`, so there is nothing to tell.
-        if self.loading || !vars.is_set(MISE_ACTIVE) {
+    // nvm switches a new shell to the default version without being
+    // asked. Where mise is switched on, mise picks the Node version, so
+    // the new shell is left exactly as it is.
+    fn switches_at_load(&self, vars: &Vars) -> bool {
+        !vars.is_set(MISE_ACTIVE)
+    }
+
+    fn switched(&self, vars: &mut Vars, version: Option<&str>, reason: Reason) {
+        // mise only hears about a switch someone asked for. Without mise
+        // switched on in this shell, nothing undoes nvm's change to `PATH`,
+        // so there is nothing to tell.
+        if reason != Reason::Asked || !vars.is_set(MISE_ACTIVE) {
             return;
         }
         match version {

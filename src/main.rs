@@ -63,9 +63,6 @@ fn init(named: Option<Named>) -> ExitCode {
     let Some(backend) = MiseBackend::from_process() else {
         return fail(NO_FOLDERS);
     };
-    // What `init` prints ends by switching the new shell to the default
-    // version. Nobody asked for that switch, so mise isn't told about it.
-    let backend = backend.while_loading();
     match host(&backend).init(named) {
         Ok(text) => {
             print!("{text}");

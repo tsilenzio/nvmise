@@ -51,8 +51,10 @@ fn run_shell(home: &Home, shell: &str, flags: &[&str], script: &str, mise_on: bo
 }
 
 const SCRIPT: &str = r#"
+before="$PATH"
 eval "$("$NVMISE" init SHELL)" || exit 90
-echo "loaded:$(nvm current) mise:${MISE_NODE_VERSION-}"
+[ "$before" = "$PATH" ] && echo "path:same" || echo "path:changed"
+echo "loaded:$(nvm current) bin:${NVM_BIN:+set} mise:${MISE_NODE_VERSION-}"
 nvm use 22.1.0 || exit 91
 echo "node:$(command -v node) mise:${MISE_NODE_VERSION-}"
 nvm alias default 22 >/dev/null && echo "alias:$(cat "$HOME/.local/share/nvmise/alias/default")"
@@ -79,13 +81,17 @@ fn every_shell_runs_nvm_through_nvmise() {
             let out = run_shell(&home, shell, flags, &SCRIPT.replace("SHELL", name), mise_on);
             let said = String::from_utf8_lossy(&out.stdout);
             let errors = String::from_utf8_lossy(&out.stderr);
-            // mise hears about `nvm use` only where it is switched on, and
-            // never about the switch a loading shell makes by itself.
-            let told = if mise_on { "22.1.0" } else { "" };
+            // Where mise is switched on, a loading shell is left exactly as
+            // it was, and mise hears about `nvm use`. Where it isn't, the
+            // default version goes on `PATH` and mise hears nothing.
+            let (loaded, told) = match mise_on {
+                true => ("path:same\nloaded:none bin: mise:", "22.1.0"),
+                false => ("path:changed\nloaded:v20.1.0 bin:set mise:", ""),
+            };
             assert_eq!(
                 said,
                 format!(
-                    "loaded:v20.1.0 mise:\nNow using node v22.1.0 (npm v10.7.0)\n\
+                    "{loaded}\nNow using node v22.1.0 (npm v10.7.0)\n\
                      node:{}/bin/node mise:{told}\nalias:22\nleft:22.1.0\nafter: mise:\n\
                      own:yes\ndone\n",
                     home.path_of("v22.1.0")
