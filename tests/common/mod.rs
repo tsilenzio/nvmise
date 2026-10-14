@@ -144,3 +144,74 @@ fn write_program(path: &Path, text: &str) {
     fs::write(path, text).unwrap();
     fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
 }
+
+/// The three scripts other tools look for in the nvm folder.
+pub const SCRIPTS: [&str; 3] = ["nvm.sh", "nvm-exec", "bash_completion"];
+
+/// What stands in for one of official nvm's scripts.
+pub fn official_text(name: &str) -> String {
+    format!("official {name}\n")
+}
+
+/// Whether Homebrew's nvm is on this machine. `self install` offers to run
+/// `brew uninstall nvm` when it is, and it looks in Homebrew's usual places
+/// whatever the test's environment says. A test that runs `self install
+/// --force` must not run on such a machine.
+pub fn homebrew_nvm_is_here() -> bool {
+    ["/opt/homebrew", "/usr/local", "/home/linuxbrew/.linuxbrew"]
+        .iter()
+        .any(|prefix| Path::new(prefix).join("opt/nvm").exists())
+}
+
+impl Home {
+    /// Puts stand-ins for official nvm's three scripts into the nvm folder.
+    pub fn with_official_nvm(&self) -> &Home {
+        for name in SCRIPTS {
+            fs::write(self.nvm_dir().join(name), official_text(name)).unwrap();
+        }
+        self
+    }
+
+    /// Whether official nvm's three scripts are in the nvm folder.
+    pub fn official_is_back(&self) -> bool {
+        SCRIPTS.iter().all(|name| {
+            fs::read_to_string(self.nvm_dir().join(name))
+                .is_ok_and(|text| text == official_text(name))
+        })
+    }
+
+    /// Who answers `nvm`: a program's name, `official`, or `nobody`.
+    pub fn answers(&self) -> String {
+        match fs::read_to_string(self.nvm_dir().join("nvm.sh")) {
+            Ok(script) if script == official_text("nvm.sh") => "official".to_string(),
+            Ok(script) => nvmimic::identity::program_of(&script)
+                .unwrap_or("someone else")
+                .to_string(),
+            Err(_) => "nobody".to_string(),
+        }
+    }
+
+    /// A program's own state folder.
+    pub fn state(&self, program: &str) -> PathBuf {
+        self.root.join(".local/state").join(program)
+    }
+
+    /// Whether a program is set up, in control or asleep.
+    pub fn installed(&self, program: &str) -> bool {
+        self.state(program).join("manifest").is_file()
+    }
+
+    /// The folder nvmise and nvmimic share: official nvm's scripts and the
+    /// record of who answers `nvm`.
+    pub fn shared(&self) -> PathBuf {
+        self.state("nvmimic-shared")
+    }
+
+    /// Whether the kept copies of official nvm's scripts are all there.
+    pub fn backup_is_whole(&self) -> bool {
+        SCRIPTS.iter().all(|name| {
+            fs::read_to_string(self.shared().join("backup").join(name))
+                .is_ok_and(|text| text == official_text(name))
+        })
+    }
+}

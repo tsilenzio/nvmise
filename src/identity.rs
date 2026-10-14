@@ -2,23 +2,89 @@
 //! shell function names out from it: `~/.local/share/nvmise`,
 //! `NVMISE_DATA_DIR`, `__nvmise_handoff`.
 
-use nvmimic::complete::{Command, Needs, command, flag};
-use nvmimic::identity::{Identity, Packages};
+use nvmimic::complete::{Command, Flag, Needs, command, flag};
+use nvmimic::identity::{Identity, Packages, Release};
 
-/// What TAB suggests after `nvmise`.
+/// The flags every `nvmise self` command takes.
+const SELF_FLAGS: &[Flag] = &[
+    flag("--force", "don't ask, go ahead"),
+    flag("--dry-run", "show what would happen and change nothing"),
+    flag("--help", "what this command does"),
+];
+
+/// What TAB suggests after `nvmise`. Keep in step with the commands in
+/// `main.rs`.
 pub static COMPLETION: Command = Command {
     name: "nvmise",
     about: "nvm's commands, with mise keeping the Node versions",
     needs: Needs::Nothing,
-    flags: &[flag("--version", "print nvmise's version")],
+    flags: &[
+        flag("--help", "show nvmise's help"),
+        flag("--version", "print nvmise's version"),
+    ],
     takes: &[],
-    commands: &[command(
-        "init",
-        "print the shell code that loads nvmise",
-        Needs::Nothing,
-        &[],
-        &[],
-    )],
+    commands: &[
+        Command {
+            name: "self",
+            about: "set nvmise up, switch it off and on, or remove it",
+            needs: Needs::Nothing,
+            flags: &[flag("--help", "what each of these does")],
+            takes: &[],
+            commands: &[
+                command(
+                    "install",
+                    "set nvmise up for your nvm folder",
+                    Needs::Nothing,
+                    SELF_FLAGS,
+                    &[],
+                ),
+                command(
+                    "disable",
+                    "hand `nvm` to nvmimic or official nvm, keep nvmise",
+                    Needs::Nothing,
+                    SELF_FLAGS,
+                    &[],
+                ),
+                command("enable", "take `nvm` back", Needs::Nothing, SELF_FLAGS, &[]),
+                command(
+                    "uninstall",
+                    "remove nvmise",
+                    Needs::Nothing,
+                    SELF_FLAGS,
+                    &[],
+                ),
+                command(
+                    "update",
+                    "get the newest nvmise",
+                    Needs::Nothing,
+                    SELF_FLAGS,
+                    &[],
+                ),
+                command(
+                    "rollback",
+                    "go back to the nvmise from before the last update",
+                    Needs::Nothing,
+                    SELF_FLAGS,
+                    &[],
+                ),
+            ],
+        },
+        Command {
+            name: "init",
+            about: "print the shell code that loads nvmise",
+            needs: Needs::Nothing,
+            flags: &[flag("--help", "what init is for")],
+            takes: &[],
+            // Keep in step with `nvmimic::init::Named`.
+            commands: &[
+                command("bash", "for bash", Needs::Nothing, &[], &[]),
+                command("zsh", "for zsh", Needs::Nothing, &[], &[]),
+                command("sh", "for sh", Needs::Nothing, &[], &[]),
+                command("dash", "for dash", Needs::Nothing, &[], &[]),
+            ],
+        },
+        command("help", "show nvmise's help", Needs::Nothing, &[], &[]),
+    ],
 };
 
 pub static NVMISE: Identity = Identity {
@@ -29,6 +95,10 @@ pub static NVMISE: Identity = Identity {
         homebrew: "nvmise",
         cargo: "nvmise",
     },
-    // nvmise has no releases yet.
-    release: None,
+    release: Some(Release {
+        url: "https://github.com/tsilenzio/nvmise/releases",
+        // Only a release build knows the team that signs releases, and
+        // `self update` accepts only a download signed by that team.
+        team_id: option_env!("NVMISE_TEAM_ID"),
+    }),
 };

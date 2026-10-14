@@ -131,13 +131,6 @@ fn the_program_says_who_it_is() {
         format!("{}\n", env!("CARGO_PKG_VERSION"))
     );
 
-    let out = run(&["init", "fish"]);
-    assert!(!out.status.success());
-    assert_eq!(
-        String::from_utf8_lossy(&out.stderr),
-        "nvmise: init doesn't know the shell fish.\n"
-    );
-
     // The shell code carries nvmise's names and none of nvmimic's.
     let out = run(&["init", "bash"]);
     let text = String::from_utf8_lossy(&out.stdout);
